@@ -1,236 +1,260 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
+<!DOCTYP html>
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>遠端溫度監控系統</title>
-    <!-- 引入 Bootstrap 5 樣式 -->
-    <link href="https://jsdelivr.net" rel="stylesheet">
-    <!-- 引入 MQTT.js 網路通訊庫 -->
-    <script src="https://unpkg.com"></script>
-    <!-- 引入 Chart.js 圖表庫與矩陣/熱力圖套件 -->
-    <script src="https://jsdelivr.net"></script>
-    <script src="https://jsdelivr.net"></script>
-    <style>
-        body { background-color: #f4f6f9; font-family: 'Microsoft JhengHei', sans-serif; }
-        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius: 12px; }
-        .temp-display { font-size: 4.5rem; font-weight: bold; color: #0d6efd; line-height: 1; }
-        .status-badge { width: 12px; height: 12px; display: inline-block; border-radius: 50%; }
-        .bg-online { background-color: #2ec4b6; }
-        .bg-offline { background-color: #e71d36; }
-        .chart-container { position: relative; height: 260px; width: 100%; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>C15 製程溫度監控</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+<style>
+  :root{
+    --bezel:#14181c;
+    --panel:#1b2128;
+    --panel-inset: #10141a;
+    --amber:#ffb020;
+    --amber-dim:#8a5c14;
+    --green:#35d488;
+    --red:#ff5a5f;
+    --text:#e8e6df;
+    --muted:#7b8794;
+    --rivet:#2a3138;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100vh;
+    background: radial-gradient(circle at 50% -10%, #23282f, var(--bezel) 60%);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    padding: 24px;
+  }
+  .device{
+    width:100%; max-width:420px;
+    background:var(--bezel);
+    border-radius:22px;
+    padding:22px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+    position:relative;
+  }
+  .rivet{
+    position:absolute; width:8px; height:8px; border-radius:50%;
+    background: radial-gradient(circle at 35% 35%, #4a545e, var(--rivet));
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.6);
+  }
+  .rivet.tl{top:12px; left:12px;} .rivet.tr{top:12px; right:12px;}
+  .rivet.bl{bottom:12px; left:12px;} .rivet.br{bottom:12px; right:12px;}
+
+  .eyebrow{
+    font-family:'Big Shoulders Display', sans-serif;
+    font-weight:800;
+    letter-spacing:0.14em;
+    font-size:13px;
+    color:var(--muted);
+    text-transform:uppercase;
+    margin: 4px 4px 2px;
+  }
+  .device-name{
+    font-family:'Big Shoulders Display', sans-serif;
+    font-weight:600;
+    font-size:22px;
+    color:var(--text);
+    margin: 0 4px 18px;
+    letter-spacing:0.01em;
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel), var(--panel-inset));
+    border-radius:16px;
+    padding: 22px 18px 18px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .gauge-wrap{ position:relative; width:100%; max-width:300px; margin:0 auto; }
+  svg{ display:block; width:100%; height:auto; }
+  .tick.major{ stroke:var(--text); stroke-width:3; }
+  .arc-bg{ fill:none; stroke:#0b0e12; stroke-width:10; }
+  .arc-fill{ fill:none; stroke:var(--amber); stroke-width:10; stroke-linecap:round;
+    filter: drop-shadow(0 0 6px rgba(255,176,32,0.55));
+    transition: stroke-dashoffset 0.6s cubic-bezier(.4,1.4,.4,1);}
+  .needle{ transform-origin: 150px 150px; transition: transform 0.6s cubic-bezier(.4,1.4,.4,1); }
+  .needle-line{ stroke:var(--amber); stroke-width:3; filter: drop-shadow(0 0 4px rgba(255,176,32,0.8)); }
+  .hub{ fill:#2a3138; stroke:var(--amber-dim); stroke-width:2; }
+
+  .readout{
+    text-align:center;
+    margin-top: -64px;
+  }
+  .readout .value{
+    font-family:'Space Mono', monospace;
+    font-weight:700;
+    font-size:48px;
+    color:var(--amber);
+    text-shadow: 0 0 18px rgba(255,176,32,0.35);
+    letter-spacing:0.02em;
+  }
+  .readout .unit{
+    font-family:'Space Mono', monospace;
+    font-size:16px;
+    color:var(--muted);
+    margin-top:-4px;
+  }
+
+  .status-row{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:20px; padding: 12px 14px;
+    background:var(--panel-inset);
+    border-radius:10px;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .status-left{ display:flex; align-items:center; gap:8px; }
+  .led{ width:9px; height:9px; border-radius:50%; background:var(--red);
+    box-shadow: 0 0 6px var(--red); transition: all .3s; }
+  .led.on{ background:var(--green); box-shadow:0 0 8px var(--green); }
+  .status-text{ font-size:13px; color:var(--muted); font-family:'Inter'; }
+  .timestamp{ font-size:12px; color:var(--muted); font-family:'Space Mono', monospace; }
+
+  .topic-label{
+    margin-top:10px; text-align:center; font-size:11px;
+    font-family:'Space Mono', monospace; color:#4a545e;
+  }
+</style>
 </head>
 <body>
 
-<div class="container-fluid py-4">
-    <!-- 頂部狀態欄 -->
-    <div class="card p-3 mb-4">
-        <div class="row align-items-center">
-            <div class="col-md-4">
-                <h3 class="mb-0 fw-bold text-secondary">溫度監控系統 <span class="fs-6 text-muted">雲端網頁版</span></h3>
-            </div>
-            <div class="col-md-8 text-md-end mt-2 mt-md-0">
-                <span class="me-3"><span id="mqtt-status-dot" class="status-badge bg-offline me-1"></span> MQTT狀態: <strong id="mqtt-status-text">連線中...</strong></span>
-                <span>最後更新: <strong id="last-update-time">--:--:--</strong></span>
-            </div>
-        </div>
+<div class="device">
+  <div class="rivet tl"></div><div class="rivet tr"></div>
+  <div class="rivet bl"></div><div class="rivet br"></div>
+
+  <div class="eyebrow">Process Temperature Monitor</div>
+  <div class="device-name">Azbil C15TV0TA030A</div>
+
+  <div class="panel">
+    <div class="gauge-wrap">
+      <svg viewBox="0 0 300 190">
+        <path class="arc-bg" d="M 30 150 A 120 120 0 0 1 270 150"/>
+        <path id="arcFill" class="arc-fill" d="M 30 150 A 120 120 0 0 1 270 150"/>
+        <g id="ticks"></g>
+        <g id="needleGroup" class="needle">
+          <line class="needle-line" x1="150" y1="150" x2="150" y2="45"/>
+        </g>
+        <circle class="hub" cx="150" cy="150" r="9"/>
+      </svg>
+      <div class="readout">
+        <div class="value" id="tempValue">--.-</div>
+        <div class="unit">°C</div>
+      </div>
     </div>
 
-    <!-- 即時數據與大字顯示 -->
-    <div class="row mb-4">
-        <div class="col-lg-4 mb-3 mb-lg-0">
-            <div class="card p-4 text-center h-100 d-flex flex-column justify-content-center">
-                <h5 class="text-muted fw-bold">當前環境溫度</h5>
-                <div class="my-3">
-                    <span id="current-temp" class="temp-display">--</span>
-                    <span class="fs-2 fw-bold text-secondary"> ℃</span>
-                </div>
-                <div id="stat-summary" class="text-muted small">
-                    今日最大值: <span id="today-max">--</span>℃ | 最小值: <span id="today-min">--</span>℃
-                </div>
-            </div>
-        </div>
-        <!-- 每秒即時趨勢圖 -->
-        <div class="col-lg-8">
-            <div class="card p-3 h-100">
-                <h6 class="fw-bold text-secondary mb-3">每秒即時溫度趨勢（最近60筆）</h6>
-                <div class="chart-container">
-                    <canvas id="secChart"></canvas>
-                </div>
-            </div>
-        </div>
+    <div class="status-row">
+      <div class="status-left">
+        <div class="led" id="connLed"></div>
+        <div class="status-text" id="connText">連線中...</div>
+      </div>
+      <div class="timestamp" id="lastUpdate">--:--:--</div>
     </div>
+  </div>
 
-    <!-- 統計圖表區 -->
-    <div class="row mb-4">
-        <div class="col-md-6 mb-3 mb-md-0">
-            <div class="card p-3">
-                <h6 class="fw-bold text-secondary mb-3">每分統計 (平均 / 最大 / 最小)</h6>
-                <div class="chart-container">
-                    <canvas id="minChart"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card p-3">
-                <h6 class="fw-bold text-secondary mb-3">每時統計 (平均 / 最大 / 最小)</h6>
-                <div class="chart-container">
-                    <canvas id="hourChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 今日熱力圖區 -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card p-3">
-                <h6 class="fw-bold text-secondary mb-3">今日各時段熱力圖 (10分鐘平均區塊)</h6>
-                <div style="position: relative; height: 350px; width: 100%;">
-                    <canvas id="heatmapChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
+  <div class="topic-label" id="topicLabel"></div>
 </div>
 
 <script>
-    // ====== MQTT 雲端連線設定 (請與 Python 端對齊) ======
-    // 這裡預設使用 HiveMQ Cloud 的公共 WebSocket 協定進行網頁端連線
-    const MQTT_BROKER = 'wss://://hivemq.com'; 
-    const TOPIC_REALTIME = 'factory/temperature/realtime';
-    const TOPIC_STATS = 'factory/temperature/stats'; // 用於接收每分/每時/熱力圖數據
+/* ================== 使用者設定：填入你的 HiveMQ Cloud 資訊 ================== */
+const CONFIG = {
+  host: "6b871cd5e09b489dbf2f8cecd2557d42.s1.eu.hivemq.cloud", // HiveMQ Cloud Cluster URL
+  port: 8884,                                // WebSocket over TLS 埠號 (HiveMQ Cloud 固定 8884)
+  path: "/mqtt",
+  username: "temp",
+  password: "temp0001",
+  topic: "azbil/c15/temperature",
+  gaugeMin: 0,     // 儀表下限 (依你的製程溫度範圍調整)
+  gaugeMax: 50      // 儀表上限
+};
+/* ============================================================================ */
 
-    // 資料快取區
-    let secData = Array(60).fill(null);
-    let secLabels = Array(60).fill('');
-    for(let i=0; i<60; i++) secLabels[i] = i + 's';
+document.getElementById("topicLabel").textContent = "TOPIC: " + CONFIG.topic;
 
-    // 初始化 Chart.js 圖表
-    const ctxSec = document.getElementById('secChart').getContext('2d');
-    const secChart = new Chart(ctxSec, {
-        type: 'line',
-        data: {
-            labels: secLabels,
-            datasets: [{
-                label: '即時溫度',
-                data: secData,
-                borderColor: '#0d6efd',
-                borderWidth: 2,
-                pointRadius: 0,
-                fill: false,
-                tension: 0.1
-            }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 15, max: 35 } } }
-    });
+function angleForValue(v){
+  const clamped = Math.max(CONFIG.gaugeMin, Math.min(CONFIG.gaugeMax, v));
+  const ratio = (clamped - CONFIG.gaugeMin) / (CONFIG.gaugeMax - CONFIG.gaugeMin);
+  return -120 + ratio * 240;
+}
 
-    // 每分與每時圖表初始化 (以折線圖包覆區間或多線呈現)
-    const initStatChart = (canvasId, labelName) => {
-        return new Chart(document.getElementById(canvasId).getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: Array.from({length: 60}, (_, i) => i + 1),
-                datasets: [
-                    { label: '平均值', data: [], borderColor: '#2ec4b6', fill: false },
-                    { label: '最大值', data: [], borderColor: '#e71d36', borderDash:, fill: false },
-                    { label: '最小值', data: [], borderColor: '#ff9f1c', borderDash:, fill: false }
-                ]
-            },
-            options: { responsive: true, maintainAspectRatio: false }
-        });
-    };
-    const minChart = initStatChart('minChart', '每分');
-    const hourChart = initStatChart('hourChart', '每時');
+function polar(cx, cy, r, angleDeg){
+  const a = (angleDeg - 90) * Math.PI / 180;
+  return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+}
 
-    // 初始化今日熱力圖 (Matrix Chart)
-    const heatmapData = [];
-    for (let h = 0; h < 24; h++) {
-        for (let m = 0; m < 60; m += 10) {
-            heatmapData.push({ x: m, y: h, v: 0 }); // v 為溫度值
-        }
+const ticksGroup = document.getElementById("ticks");
+const TICK_COUNT = 6;
+for(let i=0;i<=TICK_COUNT;i++){
+  const val = CONFIG.gaugeMin + (CONFIG.gaugeMax - CONFIG.gaugeMin) * (i/TICK_COUNT);
+  const ang = angleForValue(val);
+  const p1 = polar(150,150,120, ang);
+  const p2 = polar(150,150,108, ang);
+  const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+  line.setAttribute("x1",p1.x); line.setAttribute("y1",p1.y);
+  line.setAttribute("x2",p2.x); line.setAttribute("y2",p2.y);
+  line.setAttribute("class","tick major");
+  ticksGroup.appendChild(line);
+}
+
+const needleGroup = document.getElementById("needleGroup");
+const arcFill = document.getElementById("arcFill");
+const fullPathLength = arcFill.getTotalLength();
+arcFill.style.strokeDasharray = fullPathLength;
+arcFill.style.strokeDashoffset = fullPathLength;
+
+function updateGauge(value){
+  const clamped = Math.max(CONFIG.gaugeMin, Math.min(CONFIG.gaugeMax, value));
+  const ratio = (clamped - CONFIG.gaugeMin) / (CONFIG.gaugeMax - CONFIG.gaugeMin);
+  const angle = angleForValue(value);
+  needleGroup.style.transform = `rotate(${angle}deg)`;
+  arcFill.style.strokeDashoffset = fullPathLength * (1-ratio);
+}
+
+function setConnected(isConnected){
+  const led = document.getElementById("connLed");
+  const text = document.getElementById("connText");
+  led.classList.toggle("on", isConnected);
+  text.textContent = isConnected ? "已連線" : "連線中斷，嘗試重連...";
+}
+
+function updateReading(tempC, ts){
+  document.getElementById("tempValue").textContent = tempC.toFixed(1);
+  updateGauge(tempC);
+  const d = ts ? new Date(ts*1000) : new Date();
+  document.getElementById("lastUpdate").textContent = d.toLocaleTimeString('zh-TW', {hour12:false});
+}
+
+/* ================== MQTT 連線 (WebSocket over TLS) ================== */
+const mqttUrl = `wss://${CONFIG.host}:${CONFIG.port}${CONFIG.path}`;
+const client = mqtt.connect(mqttUrl, {
+  username: CONFIG.username,
+  password: CONFIG.password,
+  clientId: "web-dashboard-" + Math.random().toString(16).slice(2,8),
+  reconnectPeriod: 3000,
+});
+
+client.on("connect", () => {
+  setConnected(true);
+  client.subscribe(CONFIG.topic, { qos: 1 });
+});
+
+client.on("reconnect", () => setConnected(false));
+client.on("close", () => setConnected(false));
+client.on("error", (err) => { console.error("MQTT error", err); setConnected(false); });
+
+client.on("message", (topic, payload) => {
+  try{
+    const data = JSON.parse(payload.toString());
+    if (typeof data.temperature_c === "number"){
+      updateReading(data.temperature_c, data.timestamp);
     }
-    const heatmapChart = new Chart(document.getElementById('heatmapChart').getContext('2d'), {
-        type: 'matrix',
-        data: {
-            datasets: [{
-                label: '溫度熱力圖',
-                data: heatmapData,
-                backgroundColor(context) {
-                    const value = context.dataset.data[context.dataIndex].v;
-                    if (!value) return '#e9ecef';
-                    // 根據溫度動態計算顏色 (22度~28度)
-                    const alpha = Math.min(Math.max((value - 22) / 6, 0), 1);
-                    return `rgba(231, 29, 54, ${alpha})`;
-                },
-                width: ({chart}) => chart.chartArea ? (chart.chartArea.width / 6) - 2 : 0,
-                height: ({chart}) => chart.chartArea ? (chart.chartArea.height / 24) - 2 : 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { type: 'linear', min: -5, max: 55, ticks: { stepSize: 10, callback: v => v + '分' } },
-                y: { type: 'linear', min: -0.5, max: 23.5, ticks: { stepSize: 1, callback: v => v + '時' }, reverse: true }
-            }
-        }
-    });
-
-    // ====== MQTT 連線與通訊邏輯 ======
-    const client = mqtt.connect(MQTT_BROKER);
-
-    client.on('connect', () => {
-        document.getElementById('mqtt-status-dot').className = 'status-badge bg-online';
-        document.getElementById('mqtt-status-text').innerText = '已連線 (雲端監聽中)';
-        client.subscribe(TOPIC_REALTIME);
-        client.subscribe(TOPIC_STATS);
-    });
-
-    client.on('close', () => {
-        document.getElementById('mqtt-status-dot').className = 'status-badge bg-offline';
-        document.getElementById('mqtt-status-text').innerText = '中斷連線';
-    });
-
-    client.on('message', (topic, message) => {
-        const data = JSON.parse(message.toString());
-        const now = new Date();
-        document.getElementById('last-update-time').innerText = now.toLocaleTimeString();
-
-        if (topic === TOPIC_REALTIME) {
-            // 處理每秒即時資料
-            const pv = data.pv;
-            document.getElementById('current-temp').innerText = pv.toFixed(1);
-            
-            // 推入並更新即時圖表
-            secData.push(pv);
-            if (secData.length > 60) secData.shift();
-            secChart.update('none'); // 使用 'none' 模式提高渲染效能
-        } 
-        else if (topic === TOPIC_STATS) {
-            // 處理統計型資料 (由 Python 定時打包傳送過來)
-            if (data.type === 'minute') {
-                minChart.data.datasets[0].data = data.avg;
-                minChart.data.datasets[1].data = data.max;
-                minChart.data.datasets[2].data = data.min;
-                minChart.update();
-            } else if (data.type === 'hour') {
-                hourChart.data.datasets[0].data = data.avg;
-                hourChart.data.datasets[1].data = data.max;
-                hourChart.data.datasets[2].data = data.min;
-                hourChart.update();
-            } else if (data.type === 'heatmap') {
-                // 更新熱力圖矩陣
-                heatmapChart.data.datasets[0].data = data.matrix;
-                heatmapChart.update();
-                
-                // 更新今日極值
-                document.getElementById('today-max').innerText = data.today_max;
-                document.getElementById('today-min').innerText = data.today_min;
-            }
-        }
-    });
+  }catch(e){ console.error("payload解析失敗", e); }
+});
 </script>
+
 </body>
 </html>
