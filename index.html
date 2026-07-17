@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>溫度監控 Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#10151a;
+    --panel:#1a2129;
+    --panel-2:#212a33;
+    --border:#2b3540;
+    --text:#e9edf1;
+    --text-dim:#8b98a5;
+    --accent:#4fd1c5;
+    --amber:#f2a541;
+    --red:#ef4444;
+    --online:#34d399;
+    --offline:#5b6570;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans TC', 'IBM Plex Sans', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse at top, #161d24 0%, var(--bg) 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:20px 16px 60px;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+
+  header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+  }
+  .brand-eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    color:var(--accent);
+    text-transform:uppercase;
+    margin:0 0 4px;
+  }
+  h1{
+    font-size:22px;
+    margin:0;
+    font-weight:700;
+    letter-spacing:.01em;
+  }
+  .conn-pill{
+    font-family:var(--mono);
+    font-size:12px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:var(--panel);
+    border:1px solid var(--border);
+    padding:8px 14px;
+    border-radius:999px;
+    color:var(--text-dim);
+    white-space:nowrap;
+  }
+  .conn-pill .led{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--offline);
+    box-shadow:0 0 0 0 rgba(52,211,153,.5);
+  }
+  .conn-pill.live .led{
+    background:var(--online);
+    box-shadow:0 0 8px 1px var(--online);
+    animation:pulse 2s ease-in-out infinite;
+  }
+  .conn-pill.error .led{ background:var(--red); box-shadow:0 0 8px 1px var(--red); }
+  @keyframes pulse{
+    0%,100%{opacity:1;}
+    50%{opacity:.45;}
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:680px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  .card{
+    background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px 20px 14px;
+    position:relative;
+    overflow:hidden;
+  }
+  .card::before{
+    /* 儀表板刻度感的頂部細線裝飾 */
+    content:"";
+    position:absolute;
+    top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg, var(--accent), transparent 70%);
+    opacity:.7;
+  }
+  .card-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:6px;
+  }
+  .area-name{
+    font-size:15px;
+    font-weight:700;
+    letter-spacing:.02em;
+  }
+  .area-tag{
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--text-dim);
+    letter-spacing:.08em;
+  }
+  .status-dot{
+    width:9px;height:9px;border-radius:50%;
+    background:var(--offline);
+    flex:none;
+  }
+  .status-dot.online{ background:var(--online); box-shadow:0 0 6px 1px var(--online); }
+  .status-dot.hot{ background:var(--red); box-shadow:0 0 6px 1px var(--red); }
+
+  .readout-row{
+    display:flex;
+    align-items:baseline;
+    gap:6px;
+    margin:10px 0 2px;
+  }
+  .readout{
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:52px;
+    line-height:1;
+    letter-spacing:-.01em;
+    font-variant-numeric:tabular-nums;
+  }
+  .readout.hot{ color:var(--red); }
+  .unit{
+    font-family:var(--mono);
+    font-size:18px;
+    color:var(--text-dim);
+  }
+  .updated{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-dim);
+    margin-bottom:12px;
+  }
+
+  .sparkline{
+    width:100%;
+    height:74px;
+    display:block;
+  }
+
+  .stats-row{
+    display:flex;
+    gap:18px;
+    margin-top:8px;
+    padding-top:12px;
+    border-top:1px solid var(--border);
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-dim);
+  }
+  .stats-row b{ color:var(--text); font-weight:600; }
+
+  footer{
+    text-align:center;
+    color:var(--text-dim);
+    font-family:var(--mono);
+    font-size:11px;
+    margin-top:28px;
+    line-height:1.7;
+  }
+  footer a{ color:var(--accent); text-decoration:none; }
+
+  .banner{
+    display:none;
+    background:#3a1f1f;
+    border:1px solid #5b2a2a;
+    color:#f3b4b4;
+    font-family:var(--mono);
+    font-size:12px;
+    padding:10px 14px;
+    border-radius:8px;
+    margin-bottom:16px;
+  }
+  .banner.show{ display:block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="brand-eyebrow">Factory Thermal Watch</p>
+      <h1>溫度監控 Dashboard</h1>
+    </div>
+    <div class="conn-pill" id="connPill">
+      <span class="led"></span>
+      <span id="connText">連線中...</span>
+    </div>
+  </header>
+
+  <div class="banner" id="configBanner">
+    ⚠ 尚未設定 MQTT 連線資訊。請編輯 index.html 最下方 CONFIG 區塊，填入 HiveMQ Cloud 的 host 與唯讀帳密。
+  </div>
+
+  <div class="grid" id="cardGrid"></div>
+
+  <footer>
+    資料來源：模造區(PC本機RS485) / 洗淨區(UNO R4 WiFi) &mdash; 透過 MQTT over WebSocket 即時訂閱<br>
+    此頁面僅訂閱資料，不會對現場設備發布任何指令
+  </footer>
+
+</div>
+
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+/* ============================================================
+   CONFIG：部署前請務必修改這裡
+   ============================================================
+   host / port / path：HiveMQ Cloud 的 WebSocket 連線資訊
+     - host: 跟gui_monitor.py裡的MQTT_HOST一樣的Broker網址
+     - port: HiveMQ Cloud的WebSocket埠固定是 8884
+     - path: HiveMQ Cloud的WebSocket路徑固定是 /mqtt
+
+   username / password：
+     !! 重要 !! 這個網頁的原始碼會整個公開在GitHub上，
+     請勿填入gui_monitor.py / uno_r4_firmware.ino裡那組有讀寫權限的帳密。
+     請先到 HiveMQ Cloud 主控台 -> Access Management -> Add new credentials，
+     另外建立一組「唯讀」帳密，並把Permission設定為：
+       Topic filter: azbil/c15/temperature/#
+       Permission:   Subscribe only (不要給Publish權限)
+     建立好之後，把下面的 username/password 換成這組唯讀帳密即可。
+   ============================================================ */
+const CONFIG = {
+  host: "6b871cd5e09b489dbf2f8cecd2557d42.s1.eu.hivemq.cloud",
+  port: 8884,
+  path: "/mqtt",
+  username: "dashboard-viewer",
+  password: "calin888",
+};
+
+const AREAS = [
+  { key: "molding", label: "模造區", tag: "PC / RS485 主站", topic: "azbil/c15/temperature/molding" },
+  { key: "washing", label: "洗淨區", tag: "UNO R4 WiFi 從站", topic: "azbil/c15/temperature/washing" },
+];
+
+const TEMP_HIGH_THRESHOLD = 30.0;   // 跟gui_monitor.py保持一致，用來決定讀值要不要標紅
+const STALE_AFTER_MS = 15000;       // 超過15秒沒收到新資料，視為離線(灰燈)
+const SPARKLINE_MAX_POINTS = 60;
+
+const state = {};
+for (const a of AREAS) {
+  state[a.key] = { history: [], latestTemp: null, latestTime: null };
+}
+
+/* ---------------- 畫面建立 ---------------- */
+const cardGrid = document.getElementById("cardGrid");
+const cardEls = {};
+
+for (const a of AREAS) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="card-head">
+      <div>
+        <div class="area-name">${a.label}</div>
+        <div class="area-tag">${a.tag}</div>
+      </div>
+      <span class="status-dot" id="dot-${a.key}"></span>
+    </div>
+    <div class="readout-row">
+      <span class="readout" id="value-${a.key}">--</span>
+      <span class="unit">°C</span>
+    </div>
+    <div class="updated" id="updated-${a.key}">尚未收到資料</div>
+    <canvas class="sparkline" id="spark-${a.key}"></canvas>
+    <div class="stats-row">
+      <span>最高 <b id="max-${a.key}">--</b></span>
+      <span>最低 <b id="min-${a.key}">--</b></span>
+      <span>警報門檻 <b>${TEMP_HIGH_THRESHOLD.toFixed(1)}°C</b></span>
+    </div>
+  `;
+  cardGrid.appendChild(card);
+  cardEls[a.key] = {
+    dot: card.querySelector(`#dot-${a.key}`),
+    value: card.querySelector(`#value-${a.key}`),
+    updated: card.querySelector(`#updated-${a.key}`),
+    canvas: card.querySelector(`#spark-${a.key}`),
+    max: card.querySelector(`#max-${a.key}`),
+    min: card.querySelector(`#min-${a.key}`),
+  };
+}
+
+const connPill = document.getElementById("connPill");
+const connText = document.getElementById("connText");
+
+function setConnStatus(mode, text) {
+  connPill.classList.remove("live", "error");
+  if (mode) connPill.classList.add(mode);
+  connText.textContent = text;
+}
+
+/* ---------------- Sparkline（示波器風格的趨勢線） ---------------- */
+function drawSparkline(canvas, values) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  // 背景刻度格線
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const y = (h / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  if (values.length < 2) return;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = (max - min) * 0.2 || 1;
+  const lo = min - pad, hi = max + pad;
+
+  const stepX = w / (SPARKLINE_MAX_POINTS - 1);
+  const offset = SPARKLINE_MAX_POINTS - values.length;
+
+  ctx.beginPath();
+  values.forEach((v, i) => {
+    const x = (offset + i) * stepX;
+    const y = h - ((v - lo) / (hi - lo)) * h;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = "#4fd1c5";
+  ctx.lineWidth = 2;
+  ctx.shadowColor = "rgba(79,209,197,0.6)";
+  ctx.shadowBlur = 6;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // 最後一點畫一個發光的端點，模擬示波器掃描頭
+  const lastX = (offset + values.length - 1) * stepX;
+  const lastY = h - ((values[values.length - 1] - lo) / (hi - lo)) * h;
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 3.2, 0, Math.PI * 2);
+  ctx.fillStyle = "#4fd1c5";
+  ctx.shadowColor = "rgba(79,209,197,0.9)";
+  ctx.shadowBlur = 8;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+/* ---------------- 畫面更新 ---------------- */
+function renderArea(key) {
+  const s = state[key];
+  const el = cardEls[key];
+  if (s.latestTemp === null) return;
+
+  const isHot = s.latestTemp > TEMP_HIGH_THRESHOLD;
+  el.value.textContent = s.latestTemp.toFixed(1);
+  el.value.classList.toggle("hot", isHot);
+  el.updated.textContent = "最後更新: " + s.latestTime.toLocaleTimeString("zh-TW", { hour12: false });
+
+  const stale = (Date.now() - s.latestTime.getTime()) > STALE_AFTER_MS;
+  el.dot.classList.toggle("online", !stale && !isHot);
+  el.dot.classList.toggle("hot", !stale && isHot);
+
+  const vals = s.history.map(p => p.v);
+  el.max.textContent = Math.max(...vals).toFixed(1) + "°C";
+  el.min.textContent = Math.min(...vals).toFixed(1) + "°C";
+
+  drawSparkline(el.canvas, vals);
+}
+
+// 每秒重畫一次，讓「最後更新: xx秒前」這類離線判斷即使沒有新訊息也會反映出來
+setInterval(() => { for (const a of AREAS) renderArea(a.key); }, 1000);
+window.addEventListener("resize", () => { for (const a of AREAS) renderArea(a.key); });
+
+/* ---------------- MQTT連線（僅訂閱，不發布任何內容） ---------------- */
+function start() {
+  if (CONFIG.username.startsWith("REPLACE_WITH")) {
+    document.getElementById("configBanner").classList.add("show");
+    setConnStatus("error", "尚未設定連線資訊");
+    return;
+  }
+
+  const url = `wss://${CONFIG.host}:${CONFIG.port}${CONFIG.path}`;
+  setConnStatus(null, "連線中...");
+
+  const client = mqtt.connect(url, {
+    username: CONFIG.username,
+    password: CONFIG.password,
+    clientId: "cloud-dashboard-" + Math.random().toString(16).slice(2, 10),
+    clean: true,
+    reconnectPeriod: 3000,
+    connectTimeout: 10000,
+  });
+
+  client.on("connect", () => {
+    setConnStatus("live", "已連線 (即時)");
+    for (const a of AREAS) client.subscribe(a.topic, { qos: 1 });
+  });
+
+  client.on("reconnect", () => setConnStatus(null, "重新連線中..."));
+  client.on("offline", () => setConnStatus("error", "連線離線"));
+  client.on("error", (err) => {
+    console.error("MQTT錯誤:", err);
+    setConnStatus("error", "連線錯誤，請檢查帳密/網路");
+  });
+
+  client.on("message", (topic, payloadBuf) => {
+    const area = AREAS.find(a => a.topic === topic);
+    if (!area) return;
+    try {
+      const payload = JSON.parse(payloadBuf.toString());
+      const temp = Number(payload.temperature_c);
+      if (Number.isNaN(temp)) return;
+
+      const s = state[area.key];
+      s.latestTemp = temp;
+      s.latestTime = new Date();
+      s.history.push({ v: temp, t: s.latestTime });
+      if (s.history.length > SPARKLINE_MAX_POINTS) s.history.shift();
+
+      renderArea(area.key);
+    } catch (e) {
+      console.error("訊息解析失敗:", e);
+    }
+  });
+}
+
+start();
+</script>
+</body>
+</html>
